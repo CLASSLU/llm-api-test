@@ -1,4 +1,4 @@
-import { chatJson } from './openai';
+import { chatJsonRetry } from './openai';
 import type { Env } from './types';
 
 /** Feedback dimensions; entries themselves are user-typed. */
@@ -81,7 +81,7 @@ async function moderate(env: Env, text: string): Promise<boolean> {
   if (!env.RESEARCH_BASE_URL || !env.RESEARCH_API_KEY || !env.RESEARCH_MODEL) return true;
   const judge = { baseUrl: env.RESEARCH_BASE_URL, apiKey: env.RESEARCH_API_KEY, model: env.RESEARCH_MODEL };
   try {
-    const { content } = await chatJson(judge, {
+    const { content } = await chatJsonRetry(judge, {
       model: judge.model,
       messages: [{
         role: 'user',

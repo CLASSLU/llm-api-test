@@ -1,4 +1,4 @@
-import { chatJson } from './openai';
+import { chatJsonRetry } from './openai';
 import { tavilySearch } from './search';
 import type { ChannelConfig, Env } from './types';
 
@@ -49,7 +49,7 @@ export async function lookupModelSpec(
     env.RESEARCH_BASE_URL && env.RESEARCH_API_KEY && env.RESEARCH_MODEL
       ? { baseUrl: env.RESEARCH_BASE_URL, apiKey: env.RESEARCH_API_KEY, model: env.RESEARCH_MODEL }
       : testChannel;
-  const { content } = await chatJson(synth, {
+  const { content } = await chatJsonRetry(synth, {
     model: synth.model,
     messages: [{
       role: 'user',

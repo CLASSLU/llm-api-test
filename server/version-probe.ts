@@ -1,4 +1,4 @@
-import { chatJson } from './openai';
+import { chatJsonRetry } from './openai';
 import { tavilySearch, parseDateSuffix, yearForMmdd } from './search';
 import type { ChannelConfig, Env, ProbeEvent } from './types';
 
@@ -33,6 +33,10 @@ async function researchGap(
   suffixHint: string | null,
   env: Env,
 ): Promise<GapDraft> {
+  const researcher =
+    env.RESEARCH_BASE_URL && env.RESEARCH_API_KEY && env.RESEARCH_MODEL
+      ? { baseUrl: env.RESEARCH_BASE_URL, apiKey: env.RESEARCH_API_KEY, model: env.RESEARCH_MODEL }
+      : channel;
   if (!env.TAVILY_API_KEY) throw new Error('未配置 TAVILY_API_KEY，无法联网鉴定');
   const queries = [
     `${modelId} knowledge cutoff`,
@@ -50,8 +54,8 @@ async function researchGap(
 搜索片段：
 ${snippets.join('\n\n').slice(0, 6000)}`;
 
-  const { content } = await chatJson(channel, {
-    model: channel.model,
+  const { content } = await chatJsonRetry(researcher, {
+    model: researcher.model,
     messages: [{ role: 'user', content: prompt }],
     max_tokens: 2048,
   });
@@ -70,7 +74,7 @@ async function judgeAnswer(
   answer: string,
   event: VersionGapEvent,
 ): Promise<'known' | 'refused' | 'fabricated' | 'unknown'> {
-  const { content } = await chatJson(judgeChannel, {
+  const { content } = await chatJsonRetry(judgeChannel, {
     model: judgeChannel.model,
     messages: [
       { role: 'system', content: '你是严格的评测裁判。只输出一个单词：known / refused / fabricated / unknown' },
@@ -122,7 +126,7 @@ export async function* runVersionProbe(
     for (const ev of gap.events) {
       const question = `请介绍事件「${ev.title}」（约发生于 ${ev.date}）的经过，并指出其中的关键人物或机构。`;
       yield progress(`提问：${ev.title}`);
-      const { content } = await chatJson(channel, {
+      const { content } = await chatJsonRetry(channel, {
         model: channel.model,
         messages: [{ role: 'user', content: question }],
         max_tokens: 1024,

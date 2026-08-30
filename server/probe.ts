@@ -140,7 +140,14 @@ export async function* runInputProbe(
   let claimSource = claim !== null ? '手动指定' : '';
   if (claim === null) {
     yield { type: 'progress', message: '联网检索官方上下文宣称…' };
-    const spec = await lookupModelSpec(channel.model, env, channel).catch(() => null);
+    let lookupErr: unknown = null;
+    const spec = await lookupModelSpec(channel.model, env, channel).catch((e) => {
+      lookupErr = e;
+      return null;
+    });
+    if (lookupErr && !spec) {
+      yield { type: 'progress', message: '联网检索失败：' + String(lookupErr instanceof Error ? lookupErr.message : lookupErr) };
+    }
     if (spec?.contextTokens) {
       claim = spec.contextTokens;
       claimSource = '官方资料（联网检索）';
@@ -476,7 +483,14 @@ export async function* runOutputProbe(
   let specClaim: number | null = null;
   if (target === null && env?.TAVILY_API_KEY) {
     yield progress('联网检索官方 max_output 宣称…');
-    const spec = await lookupModelSpec(channel.model, env, channel).catch(() => null);
+    let specLookupErr: unknown = null;
+    const spec = await lookupModelSpec(channel.model, env, channel).catch((e) => {
+      specLookupErr = e;
+      return null;
+    });
+    if (specLookupErr && !spec) {
+      yield progress('联网检索失败：' + String(specLookupErr instanceof Error ? specLookupErr.message : specLookupErr));
+    }
     if (spec?.maxOutputTokens) {
       specClaim = spec.maxOutputTokens;
       yield progress(`官方宣称 max output ≈ ${specClaim.toLocaleString()}（联网检索）`);

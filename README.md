@@ -41,10 +41,10 @@ npm test               # 单元/集成测试（内置 mock OpenAI 服务）
 本地密钥放 `.dev.vars`（已 gitignore）：
 
 ```ini
-NVAPI_KEY=nvapi-…          # 默认示例渠道（NVIDIA）
 TAVILY_API_KEY=tvly-dev-…  # 知识截止测试的联网能力
 RESEARCH_BASE_URL=https://integrate.api.nvidia.com/v1
-RESEARCH_MODEL=deepseek-ai/deepseek-v4-pro-0813   # 知识截止测试的巡检员/裁判模型
+RESEARCH_API_KEY=nvapi-…      # 巡检员/裁判模型的 Key
+RESEARCH_MODEL=deepseek-ai/deepseek-v4-flash-0731  # 知识截止测试的巡检员/裁判模型
 ```
 
 ## 部署到 Cloudflare

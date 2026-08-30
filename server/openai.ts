@@ -120,6 +120,31 @@ export async function chatJson(
   };
 }
 
+/**
+ * chatJson with retry on transient upstream failures (429 / 5xx).
+ * Used by research/judge calls where a single rate-limit blip shouldn't
+ * fail the whole probe.
+ */
+export async function chatJsonRetry(
+  channel: ChannelConfig,
+  payload: CompletionPayload,
+  opts: { timeoutMs?: number; retries?: number; backoffMs?: number } = {},
+): Promise<{ content: string; usage: UsageInfo }> {
+  const { timeoutMs = 240_000, retries = 2, backoffMs = 2000 } = opts;
+  let lastErr: unknown;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      return await chatJson(channel, payload, timeoutMs);
+    } catch (err) {
+      lastErr = err;
+      const retryable = err instanceof UpstreamError && (err.status === 429 || err.status >= 500);
+      if (!retryable || attempt === retries) break;
+      await new Promise((r) => setTimeout(r, backoffMs * 2 ** attempt));
+    }
+  }
+  throw lastErr;
+}
+
 /** Parse an OpenAI-style SSE body, invoking onDelta per text chunk. */
 export async function readStreamChunks(
   res: Response,
