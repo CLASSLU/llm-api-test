@@ -50,7 +50,7 @@ async function researchGap(
   }
   const prompt = `今天是 ${new Date().toISOString().slice(0, 10)}。以下是与模型 ID「${modelId}」相关的网络搜索片段。请以今天为参照确认该 ID 对应的真实发布与其官方知识截止时间，再找它的上一代版本。严格输出 JSON：
 {"identified":"该ID指代的发布名称(仅当片段可确认)","priorName":"上一代版本名|null","oldCutoff":"上一代知识截止 YYYY-MM|null","newCutoff":"本代知识截止 YYYY-MM|null","events":[{"title":"事件标题","date":"YYYY-MM-DD","expectKeywords":["专有名词"],"sourceUrl":"https://来源链接"}]}
-选题规则：events 收录 2~4 个重大公开事件；若上一代截止已知 → date 必须落在 (oldCutoff, newCutoff] 窗口内；若无上一代信息 → date 落在 (newCutoff, 今天-30天]，用于验证被测模型是否真具备其宣称的时效。expectKeywords 是能证明知情的专有名词。不确定就给 null/空数组，禁止编造。
+选题规则：events 收录 2~4 个真实发生过的重大公开事件（不要选与被测模型自身或其厂商直接相关的事件，避免循环验证）。选窗优先级：①两代截止都已知 → date 落在 (oldCutoff, newCutoff]；②仅本代截止已知 → date 落在 (newCutoff, 今天-30天]；③连本代截止也无法确认 → date 落在 (今天-360天, 今天-30天]，用于粗测被测模型的时效广度。expectKeywords 是公开报道中可核验的专有名词。事件必须真实存在且日期正确，不确定的字段给 null，禁止编造。
 搜索片段：
 ${snippets.join('\n\n').slice(0, 6000)}`;
 
@@ -109,7 +109,11 @@ export async function* runVersionProbe(
 
     yield progress('联网检索新旧版知识截止与发布时间…');
     const gap = await researchGap(channel, modelId, mmdd, env);
-    if (!gap.events.length) throw new Error('未能从搜索结果中提炼出可信的时间差事件，请稍后重试');
+    if (!gap.events.length) {
+      throw new Error(
+        `未能从搜索结果中提炼出可信的时间差事件（识别到: ${gap.identified ?? '无'} · 上代: ${gap.priorName ?? '无'} · 本代截止: ${gap.newCutoff ?? '未知'}），请稍后重试`,
+      );
+    }
     yield progress(`时间线：${gap.priorName ?? '(未找到上代)'} 截止 ${gap.oldCutoff ?? '?'} → 本代截止 ${gap.newCutoff ?? '?'} · 共 ${gap.events.length} 道题`);
 
     const judge =
