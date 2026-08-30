@@ -128,18 +128,25 @@ export async function chatJson(
 export async function chatJsonRetry(
   channel: ChannelConfig,
   payload: CompletionPayload,
-  opts: { timeoutMs?: number; retries?: number; backoffMs?: number } = {},
+  opts: {
+    timeoutMs?: number;
+    retries?: number;
+    backoffMs?: number;
+    onRetry?: (info: { attempt: number; status: number; delayMs: number }) => void;
+  } = {},
 ): Promise<{ content: string; usage: UsageInfo }> {
-  const { timeoutMs = 240_000, retries = 2, backoffMs = 2000 } = opts;
+  const { timeoutMs = 240_000, retries = 2, backoffMs = 2000, onRetry } = opts;
   let lastErr: unknown;
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
       return await chatJson(channel, payload, timeoutMs);
     } catch (err) {
       lastErr = err;
-      const retryable = err instanceof UpstreamError && (err.status === 429 || err.status >= 500);
-      if (!retryable || attempt === retries) break;
-      await new Promise((r) => setTimeout(r, backoffMs * 2 ** attempt));
+      if (!(err instanceof UpstreamError) || !(err.status === 429 || err.status >= 500)) break;
+      if (attempt === retries) break;
+      const delayMs = backoffMs * 2 ** attempt;
+      onRetry?.({ attempt: attempt + 1, status: err.status, delayMs });
+      await new Promise((r) => setTimeout(r, delayMs));
     }
   }
   throw lastErr;

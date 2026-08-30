@@ -2,6 +2,11 @@ import { chatJsonRetry, extractJsonObject } from './openai';
 import { tavilySearch, parseDateSuffix, yearForMmdd } from './search';
 import type { ChannelConfig, Env, ProbeEvent } from './types';
 
+type NoteFn = (msg: string) => void;
+const retryNote = (onNote?: NoteFn) =>
+  ({ attempt, status, delayMs }: { attempt: number; status: number; delayMs: number }) =>
+    onNote?.(`上游 ${status} 限流，${Math.round(delayMs / 1000)}s 后第 ${attempt} 次重试…`);
+
 export interface VersionGapEvent {
   title: string;
   date: string; // yyyy-mm(-dd)
@@ -32,6 +37,7 @@ async function researchGap(
   modelId: string,
   suffixHint: string | null,
   env: Env,
+  onNote?: NoteFn,
 ): Promise<GapDraft> {
   const researcher =
     env.RESEARCH_BASE_URL && env.RESEARCH_API_KEY && env.RESEARCH_MODEL
@@ -54,11 +60,15 @@ async function researchGap(
 搜索片段：
 ${snippets.join('\n\n').slice(0, 6000)}`;
 
-  const { content } = await chatJsonRetry(researcher, {
-    model: researcher.model,
-    messages: [{ role: 'user', content: prompt }],
-    max_tokens: 2048,
-  });
+  const { content } = await chatJsonRetry(
+    researcher,
+    {
+      model: researcher.model,
+      messages: [{ role: 'user', content: prompt }],
+      max_tokens: 2048,
+    },
+    { retries: 3, backoffMs: 4000, onRetry: retryNote(onNote) },
+  );
   const draft = safeJson(content);
   void suffixHint;
   // Basic sanity filter.
@@ -73,15 +83,20 @@ async function judgeAnswer(
   question: string,
   answer: string,
   event: VersionGapEvent,
+  onNote?: NoteFn,
 ): Promise<'known' | 'refused' | 'fabricated' | 'unknown'> {
-  const { content } = await chatJsonRetry(judgeChannel, {
+  const { content } = await chatJsonRetry(
+    judgeChannel,
+    {
     model: judgeChannel.model,
     messages: [
       { role: 'system', content: '你是严格的评测裁判。只输出一个单词：known / refused / fabricated / unknown' },
       { role: 'user', content: `问题：${question}\n事件：${event.title}(${event.date})，关键信息应包含：${event.expectKeywords.join('、')}\n被测模型回答：${answer}\n判定它是否确实知道该事件(known)、诚实拒绝(refused)、编造细节(fabricated)、或无法判断(unknown)。` },
     ],
-    max_tokens: 256,
-  });
+      max_tokens: 256,
+    },
+    { retries: 3, backoffMs: 3000, onRetry: retryNote(onNote) },
+  );
   const w = content.toLowerCase();
   return w.includes('known') ? 'known' : w.includes('fabricated') ? 'fabricated' : w.includes('refused') ? 'refused' : 'unknown';
 }
@@ -108,7 +123,10 @@ export async function* runVersionProbe(
     if (mmdd) yield progress(`检测到日期后缀提示 ≈${suffixYear}-${mmdd.slice(0, 2)}-${mmdd.slice(2)}`); else yield progress('无日期后缀，将完全依赖联网时间线考古…');
 
     yield progress('联网检索新旧版知识截止与发布时间…');
-    const gap = await researchGap(channel, modelId, mmdd, env);
+    const retryNotes: string[] = [];
+    const noteSink: NoteFn = (m) => retryNotes.push(m);
+    const gap = await researchGap(channel, modelId, mmdd, env, noteSink);
+    for (const n of retryNotes.splice(0)) yield progress(n);
     if (!gap.events.length) {
       throw new Error(
         `未能从搜索结果中提炼出可信的时间差事件（识别到: ${gap.identified ?? '无'} · 上代: ${gap.priorName ?? '无'} · 本代截止: ${gap.newCutoff ?? '未知'}），请稍后重试`,
@@ -130,12 +148,20 @@ export async function* runVersionProbe(
     for (const ev of gap.events) {
       const question = `请介绍事件「${ev.title}」（约发生于 ${ev.date}）的经过，并指出其中的关键人物或机构。`;
       yield progress(`提问：${ev.title}`);
-      const { content } = await chatJsonRetry(channel, {
-        model: channel.model,
-        messages: [{ role: 'user', content: question }],
-        max_tokens: 1024,
-      });
-      const v = judge ? await judgeAnswer(judge, question, content.trim(), ev) : heuristicVerdict(content.trim(), ev);
+      const { content } = await chatJsonRetry(
+        channel,
+        {
+          model: channel.model,
+          messages: [{ role: 'user', content: question }],
+          max_tokens: 1024,
+        },
+        { retries: 4, backoffMs: 5000, onRetry: retryNote(noteSink) },
+      );
+      for (const n of retryNotes.splice(0)) yield progress(n);
+      const v = judge
+        ? await judgeAnswer(judge, question, content.trim(), ev, noteSink)
+        : heuristicVerdict(content.trim(), ev);
+      for (const n of retryNotes.splice(0)) yield progress(n);
       results.push({
         title: `${ev.title}（${ev.date}）`,
         date: ev.date,
