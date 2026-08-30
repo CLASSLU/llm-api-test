@@ -152,6 +152,46 @@ export async function chatJsonRetry(
   throw lastErr;
 }
 
+/**
+ * Streaming variant of chatJson: collects deltas into a full response.
+ * Long-reasoning models emit reasoning tokens continuously, which keeps
+ * upstream edges (Cloudflare, API gateways) from killing an idle
+ * non-streaming request with a 524.
+ */
+export async function chatStreamText(
+  channel: ChannelConfig,
+  payload: CompletionPayload,
+  timeoutMs = 600_000,
+  onDelta?: (text: string) => void,
+): Promise<{ content: string; usage: UsageInfo }> {
+  let res: Response;
+  try {
+    res = await chat(
+      channel,
+      { ...payload, stream: true, stream_options: { include_usage: true } },
+      AbortSignal.timeout(timeoutMs),
+    );
+    if (!res.ok) {
+      const errBody = await res.text();
+      if (res.status === 400 || res.status === 422) {
+        // Some providers reject stream_options; retry without it.
+        res = await chat(channel, { ...payload, stream: true }, AbortSignal.timeout(timeoutMs));
+        if (!res.ok) throw new UpstreamError(res.status, await res.text());
+      } else {
+        throw new UpstreamError(res.status, errBody);
+      }
+    }
+  } catch (err) {
+    if (err instanceof UpstreamError) throw err;
+    wrapFetchError(err);
+  }
+  let content = '';
+  const usage = await readStreamChunks(res!, (d) => {
+    content += d;
+    onDelta?.(d);
+  });
+  return { content, usage };
+}
 /** Parse an OpenAI-style SSE body, invoking onDelta per text chunk. */
 export async function readStreamChunks(
   res: Response,

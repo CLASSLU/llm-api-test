@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { measureSpeed, runInputProbe, runOutputProbe } from './probe';
 import { fetchModels } from './openai';
-import { chatJson } from './openai';
+import { chatJson, chatStreamText } from './openai';
 import { CANDY_QUESTION, SVG_PROMPT, gradeCandy, gradeSvg, extractSvgBlock } from './qa';
 import { runVersionProbe } from './version-probe';
 import { runConcurrencyProbe } from './concurrency';
@@ -80,11 +80,11 @@ api.post('/test/svg', async (c) => {
   const body = await c.req.json();
   const channel = (body.channel ?? body) as ChannelConfig;
   try {
-    const { content } = await chatJson(channel, {
+    const { content } = await chatStreamText(channel, {
       model: channel.model,
       messages: [{ role: 'user', content: SVG_PROMPT }],
       max_tokens: 4096,
-    });
+    }, 300_000);
     const clean = extractSvgBlock(content);
     return c.json({ grade: gradeSvg(clean), svg: clean });
   } catch (err: any) {
@@ -100,18 +100,19 @@ async function* genCandy(c: any): AsyncGenerator<ProbeEvent> {
   const body = await c.req.json();
   const channel = (body.channel ?? body) as ChannelConfig;
   const started = Date.now();
-  const box: { res: Awaited<ReturnType<typeof chatJson>> | null; err: any; done: boolean } = { res: null, err: null, done: false };
-  chatJson(channel, {
+  const box: { res: Awaited<ReturnType<typeof chatStreamText>> | null; err: any; done: boolean; chars: number } = { res: null, err: null, done: false, chars: 0 };
+  chatStreamText(channel, {
     model: channel.model,
     messages: [{ role: 'user', content: CANDY_QUESTION }],
     max_tokens: 8192,
-  }, 600_000)
+  }, 600_000, (d) => { box.chars += d.length; })
     .then((r) => { box.res = r; })
     .catch((e) => { box.err = e; })
     .finally(() => { box.done = true; });
   while (!box.done) {
     const elapsedSec = Math.round((Date.now() - started) / 1000);
-    yield { type: 'progress', message: `模型思考中，已等待 ${elapsedSec}s`, data: { elapsedSec } };
+    const tokInfo = box.chars > 0 ? ` · 已接收 ~${Math.round(box.chars / 4)} tok` : '';
+    yield { type: 'progress', message: `模型思考中，已等待 ${elapsedSec}s${tokInfo}`, data: { elapsedSec } };
     for (let i = 0; i < 50 && !box.done; i++) await new Promise((res) => setTimeout(res, 100));
   }
   if (box.err || !box.res) {

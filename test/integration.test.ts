@@ -29,15 +29,27 @@ beforeAll(async () => {
       const promptTokens = Math.ceil(promptChars / 4);
       const firstMsg = payload.messages[0]?.content ?? '';
       if (firstMsg.includes('SVG')) {
+        const svgBody = '<svg viewBox="0 0 10 10"><circle cx="5" cy="5" r="4"/></svg>';
+        if (payload.stream) {
+          res.setHeader('Content-Type', 'text/event-stream');
+          res.end(`data: ${JSON.stringify({ choices: [{ delta: { content: svgBody } }] })}\n\ndata: [DONE]\n\n`);
+          return;
+        }
         res.end(JSON.stringify({
-          choices: [{ message: { content: '<svg viewBox="0 0 10 10"><circle cx="5" cy="5" r="4"/></svg>' } }],
+          choices: [{ message: { content: svgBody } }],
           usage: { prompt_tokens: promptTokens, completion_tokens: 15, total_tokens: promptTokens + 15 },
         }));
         return;
       }
       if (firstMsg.includes('糖果')) {
+        const candyBody = '由抽屉原理，最少需要取出 21 个。';
+        if (payload.stream) {
+          res.setHeader('Content-Type', 'text/event-stream');
+          res.end(`data: ${JSON.stringify({ choices: [{ delta: { content: candyBody } }] })}\n\ndata: [DONE]\n\n`);
+          return;
+        }
         res.end(JSON.stringify({
-          choices: [{ message: { content: '由抽屉原理，最少需要取出 21 个。' } }],
+          choices: [{ message: { content: candyBody } }],
           usage: { prompt_tokens: promptTokens, completion_tokens: 20, total_tokens: promptTokens + 20 },
         }));
         return;
