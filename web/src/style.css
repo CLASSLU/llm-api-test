@@ -418,6 +418,19 @@ input:focus, select:focus { outline: none; border-color: color-mix(in srgb, var(
 .report-hero .score-num { font-size: 30px; font-weight: 800; }
 .report-hero .score-cap { font-size: 11px; color: var(--muted); }
 .report-hero h2 { margin: 6px 0 2px; }
+.stat-band {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;
+  margin: 4px 0 22px;
+}
+.stat {
+  background: var(--bg1); border: 1px solid var(--border); border-radius: 10px;
+  padding: 12px 14px; min-width: 0;
+}
+.stat.warn { border-color: rgba(245, 158, 11, 0.5); }
+.stat-val { font-size: 22px; font-weight: 700; line-height: 1.2; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.stat-unit { font-size: 12px; font-weight: 400; color: var(--muted); margin-left: 4px; }
+.stat-label { font-size: 12px; color: var(--muted); margin-top: 3px; }
+@media (max-width: 720px) { .stat-band { grid-template-columns: repeat(2, 1fr); } }
 .report-rows { display: flex; flex-direction: column; gap: 12px; margin: 22px 0; }
 .rrow { display: grid; grid-template-columns: minmax(130px, auto) minmax(140px, 1fr) minmax(200px, auto); align-items: center; gap: 14px; }
 .rrow .nm { display: flex; gap: 8px; align-items: center; font-size: 13px; }

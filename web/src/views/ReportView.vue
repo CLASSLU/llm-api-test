@@ -5,6 +5,16 @@ import MeterBar from '../components/MeterBar.vue';
 
 const scoredCount = computed(() => reportRows.value.filter((r) => r.score !== null).length);
 
+const compact = (v: number | null | undefined): string =>
+  v === null || v === undefined ? '—' : Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 }).format(v);
+
+const stats = computed(() => [
+  { icon: '📥', label: '实测最大输入', value: compact(state.inputResult?.maxSafeTokens), unit: 'tok', warn: state.inputResult?.echoVerified === false },
+  { icon: '📤', label: '实测最大输出', value: compact(state.outputResult?.achievedCompletionTokens), unit: 'tok', warn: state.outputResult?.tokenReportMismatched ?? false },
+  { icon: '🧵', label: '最大并发', value: compact(state.concurrencyResult?.maxConcurrentOk), unit: '路', warn: false },
+  { icon: '⚡', label: '输出吞吐', value: state.speedResult ? state.speedResult.tokensPerSecond.toFixed(1) : '—', unit: 'tok/s', warn: false },
+]);
+
 function copyMd() {
   navigator.clipboard.writeText(buildMarkdown());
 }
@@ -29,6 +39,12 @@ function copyMd() {
         </div>
         <h2>{{ state.channel.model || '未配置模型' }}</h2>
         <div class="sub" style="color:var(--muted);font-size:12.5px">{{ state.channel.baseUrl }}</div>
+      </div>
+      <div class="stat-band">
+        <div v-for="st in stats" :key="st.label" class="stat" :class="{ warn: st.warn }" :title="st.warn ? (st.label === '实测最大输入' ? '口令未回显，结果仅供参考' : '渠道上报用量与实测不符') : ''">
+          <div class="stat-val">{{ st.value }}<span class="stat-unit">{{ st.unit }}</span></div>
+          <div class="stat-label">{{ st.icon }} {{ st.label }}{{ st.warn ? ' ⚠' : '' }}</div>
+        </div>
       </div>
       <div class="report-rows">
         <div v-for="r in reportRows" :key="r.name" class="rrow">

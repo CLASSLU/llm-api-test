@@ -341,7 +341,7 @@ export const reportRows = computed<ReportRow[]>(() => {
     name: '最大输入', icon: '📥',
     score: ip ? (ip.maxSafeTokens ? Math.round(Math.min(100, Math.max(0, Math.round((Math.log2(ip.maxSafeTokens / 1024) / 10) * 100))) * (ip.echoVerified === false ? 0.5 : 1)) : 0) : null,
     maxScore: 100,
-    summary: ip ? `实测 ${ip.maxSafeTokens?.toLocaleString() ?? '未通过'} tok${ip.claim ? ` · 宣称 ${ip.claim.toLocaleString()}（${ip.claimSource}）` : ''}${ip.inconclusive ? ' · 下界' : ''}${ip.echoVerified === false ? ' · ⚠ 口令未回显（仅供参考）' : ''}` : '未测试',
+    summary: ip ? (ip.maxSafeTokens ? `实测 ${ip.maxSafeTokens.toLocaleString()} tok${ip.claim ? ` · 宣称 ${ip.claim.toLocaleString()}（${ip.claimSource}）` : ''}${ip.inconclusive ? ' · 下界' : ''}${ip.echoVerified === false ? ' · ⚠ 口令未回显（仅供参考）' : ''}` : '上限验证未通过') : '未测试',
   });
   const op = state.outputResult;
   rows.push({
