@@ -189,6 +189,35 @@ export async function readStreamChunks(
   return usage;
 }
 
+/**
+ * Extract the first JSON object from model output. Handles ```json fences
+ * and chatty preambles/trailing text by brace-matching the first {...} block.
+ */
+export function extractJsonObject(text: string): string | null {
+  const fence = /```(?:json)?\s*([\s\S]*?)```/.exec(text);
+  const src = fence ? fence[1] : text;
+  const start = src.indexOf('{');
+  if (start < 0) return null;
+  let depth = 0;
+  let inStr = false;
+  let esc = false;
+  for (let i = start; i < src.length; i++) {
+    const c = src[i];
+    if (inStr) {
+      if (esc) esc = false;
+      else if (c === '\\') esc = true;
+      else if (c === '"') inStr = false;
+      continue;
+    }
+    if (c === '"') inStr = true;
+    else if (c === '{') depth++;
+    else if (c === '}') {
+      depth--;
+      if (depth === 0) return src.slice(start, i + 1);
+    }
+  }
+  return null;
+}
 export function estimateTokensFromChars(text: string): number {
   return Math.round(text.length / 4);
 }

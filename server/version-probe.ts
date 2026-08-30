@@ -1,4 +1,4 @@
-import { chatJsonRetry } from './openai';
+import { chatJsonRetry, extractJsonObject } from './openai';
 import { tavilySearch, parseDateSuffix, yearForMmdd } from './search';
 import type { ChannelConfig, Env, ProbeEvent } from './types';
 
@@ -18,9 +18,9 @@ interface GapDraft {
 }
 
 function safeJson(text: string): GapDraft {
-  const fence = /```(?:json)?\s*([\s\S]*?)```/.exec(text);
-  const raw = (fence ? fence[1] : text).trim();
+  const raw = extractJsonObject(text);
   try {
+    if (!raw) throw new Error("no json");
     return JSON.parse(raw) as GapDraft;
   } catch {
     return { identified: null, priorName: null, oldCutoff: null, newCutoff: null, events: [] };

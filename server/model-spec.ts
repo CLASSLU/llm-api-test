@@ -1,4 +1,4 @@
-import { chatJsonRetry } from './openai';
+import { chatJsonRetry, extractJsonObject } from './openai';
 import { tavilySearch } from './search';
 import type { ChannelConfig, Env } from './types';
 
@@ -9,9 +9,10 @@ export interface ModelSpec {
 }
 
 function parseSpecJson(text: string): { contextTokens: number | null; maxOutputTokens: number | null } {
-  const fence = /```(?:json)?\s*([\s\S]*?)```/.exec(text);
+  const raw = extractJsonObject(text);
   try {
-    const j = JSON.parse((fence ? fence[1] : text).trim()) as Record<string, unknown>;
+    if (!raw) throw new Error('no json');
+    const j = JSON.parse(raw) as Record<string, unknown>;
     const num = (v: unknown, max: number): number | null => {
       const n = typeof v === 'string' ? Number(v.replace(/[^\d]/g, '')) : Number(v);
       return Number.isFinite(n) && n >= 256 && n <= max ? Math.round(n) : null;
