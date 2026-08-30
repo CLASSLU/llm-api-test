@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ref, watch, nextTick } from 'vue';
 import { state, statuses, runSpeed, runConcurrencyTest, runInputProbe, runOutputProbe, runSvgTest, rateSvg, SVG_RATING_LABELS, type SvgUserRating, runCandyTest, runVersionCheck, runSuite } from '../store';
 import StatusPill from '../components/StatusPill.vue';
 import MeterBar from '../components/MeterBar.vue';
@@ -10,6 +11,15 @@ function svgDataUri(svg: string): string {
   }
   return `data:image/svg+xml;utf8,${encodeURIComponent(safe)}`;
 }
+const logBox = ref<HTMLElement | null>(null);
+watch(
+  () => state.logs.length,
+  async () => {
+    await nextTick();
+    const el = logBox.value;
+    if (el) el.scrollTop = el.scrollHeight;
+  },
+);
 defineExpose({});
 </script>
 
@@ -185,9 +195,9 @@ defineExpose({});
       </div>
     </div>
 
-    <details class="panel" style="margin-top:20px">
+    <details class="panel" open style="margin-top:20px">
       <summary style="cursor:pointer;font-size:14px;font-weight:600">📜 运行日志</summary>
-      <pre class="logbox"><template v-for="(l, i) in state.logs" :key="i">{{ l }}&#10;</template><span v-if="!state.logs.length" style="color:#667">暂无日志</span></pre>
+      <pre class="logbox" ref="logBox"><template v-for="(l, i) in state.logs" :key="i">{{ l }}&#10;</template><span v-if="!state.logs.length" style="color:#667">暂无日志</span></pre>
     </details>
   </div>
 </template>
