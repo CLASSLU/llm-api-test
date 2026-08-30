@@ -255,7 +255,13 @@ export async function runOutputProbe() {
       else if (evt.type === 'result') result = evt.data;
       else if (evt.type === 'error') throw new Error(evt.message);
     });
-    if (result) finish('output', result);
+    if (result) {
+      finish('output', result);
+      const stopped = result.selfStopped ? '模型主动自停（未探到上限）' : result.finishedByStop ? '自然停止' : result.timedOut ? '超时截断' : '压到上限';
+      log(`📤 输出实测 ~${(result.achievedCompletionTokens ?? 0).toLocaleString()} tok（${stopped}）`);
+    } else {
+      fail('output', new Error('服务未返回探测结果（连接可能提前中断）'));
+    }
   } catch (e) { fail('output', e); }
 }
 
@@ -348,7 +354,7 @@ export const reportRows = computed<ReportRow[]>(() => {
     name: '最大输出', icon: '📤',
     score: op ? (op.achievedCompletionTokens ? Math.min(100, Math.max(0, Math.round((Math.log2(op.achievedCompletionTokens / 1024) / 7) * 100))) : 0) : null,
     maxScore: 100,
-    summary: op ? `实测 ${op.achievedCompletionTokens} tok · ${op.finishedByStop ? '自然停止' : op.timedOut ? '超时截断' : '压到上限'}${op.tokenReportMismatched ? ` · 渠报 ${op.reportedCompletionTokens}（可疑）` : ''}` : '未测试',
+    summary: op ? `实测 ${op.achievedCompletionTokens} tok · ${op.selfStopped ? '模型主动自停' : op.finishedByStop ? '自然停止' : op.timedOut ? '超时截断' : '压到上限'}${op.tokenReportMismatched ? ` · 渠报 ${op.reportedCompletionTokens}（可疑）` : ''}` : '未测试',
   });
   const sv = state.svgResult;
   rows.push({

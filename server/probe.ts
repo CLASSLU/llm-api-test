@@ -366,6 +366,10 @@ async function measureSpeedNoUsageOption(
 const OUTPUT_FILLER_PROMPT =
   'Please repeat the exact string "apple banana cherry " over and over without stopping, formatting, counting, or explaining. Do not stop early.';
 
+/** Fallback when the model politely refuses the filler task. Counting is hard to refuse. */
+const OUTPUT_ALT_PROMPT =
+  'Output one integer per line, counting upward starting from 1. Each line contains only the number. Continue as long as possible; never stop, summarize, explain, or wrap in code fences.';
+
 const ASTRONOMICAL_MAX_TOKENS = 1_000_000;
 
 /** Pull a real completion cap out of provider error text, e.g. "supports at most 16384 completion tokens". */
@@ -381,6 +385,7 @@ async function* streamOnce(
   channel: ChannelConfig,
   maxTokens: number,
   timeoutMs: number,
+  promptText: string,
 ): AsyncGenerator<ProbeEvent, OutputProbeResult> {
   const started = Date.now();
   const controller = new AbortController();
@@ -391,7 +396,7 @@ async function* streamOnce(
     let reachedDone = false;
     const res = await chat(channel, {
       model: channel.model,
-      messages: [{ role: 'user', content: OUTPUT_FILLER_PROMPT }],
+      messages: [{ role: 'user', content: promptText }],
       max_tokens: maxTokens,
       stream: true,
       stream_options: { include_usage: true },
@@ -399,6 +404,7 @@ async function* streamOnce(
     if (!res.ok) throw new UpstreamError(res.status, await res.text());
     type Usage = { promptTokens: number | null; completionTokens: number | null; totalTokens: number | null };
     let usage: Usage = { promptTokens: null, completionTokens: null, totalTokens: null };
+    let finishReason: string | null = null;
     const reader = res.body!.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
@@ -419,6 +425,8 @@ async function* streamOnce(
             const evt = JSON.parse(payload) as any;
             const delta = evt.choices?.[0]?.delta?.content;
             if (delta) charsOut += delta;
+            const fr = evt.choices?.[0]?.finish_reason;
+            if (typeof fr === 'string' && fr) finishReason = fr;
             if (evt.usage) {
               usage = {
                 promptTokens: evt.usage.prompt_tokens ?? null,
@@ -455,10 +463,11 @@ async function* streamOnce(
       mismatched = Math.abs(estimated - reported) / Math.max(estimated, reported) > 0.25;
       if (mismatched) achieved = estimated;
     }
-    const stopped = !timedOut && reachedDone && achieved < maxTokens * 0.9;
+    const stopped = !timedOut && reachedDone && finishReason !== 'length' && achieved < maxTokens * 0.9;
     return {
       requestedMaxTokens: maxTokens,
       achievedCompletionTokens: achieved,
+      finishReason,
       finishedByStop: stopped,
       totalMs: Date.now() - started,
       ...(timedOut ? { timedOut: true } : {}),
@@ -504,12 +513,13 @@ export async function* runOutputProbe(
   };
 
   let attempts = 0;
+  let usedAltPrompt = false;
   while (attempts < 3) {
     const t = target ?? ASTRONOMICAL_MAX_TOKENS;
     yield progress(`以 max_tokens=${t.toLocaleString()} 发起流式实测…`);
     let result: OutputProbeResult;
     try {
-      result = yield* streamOnce(channel, t, timeoutMs);
+      result = yield* streamOnce(channel, t, timeoutMs, usedAltPrompt ? OUTPUT_ALT_PROMPT : OUTPUT_FILLER_PROMPT);
     } catch (err) {
       if (err instanceof UpstreamError && (err.status === 400 || err.status === 422) && attempts < 2) {
         attempts++;
@@ -527,6 +537,17 @@ export async function* runOutputProbe(
       yield { type: 'done' };
       return;
     }
+    const got = result.achievedCompletionTokens ?? 0;
+    const selfStopped =
+      result.finishedByStop === true &&
+      result.finishReason !== 'length' &&
+      got < Math.min(4096, Math.max(256, t * 0.05));
+    if (selfStopped && !usedAltPrompt) {
+      usedAltPrompt = true;
+      yield progress(`模型输出 ~${got.toLocaleString()} tok 后主动停止（疑似不配合复读），换计数提示词重测…`);
+      continue;
+    }
+    if (selfStopped) result.selfStopped = true;
     yield { type: 'result', data: finish(result) };
     yield { type: 'done' };
     return;

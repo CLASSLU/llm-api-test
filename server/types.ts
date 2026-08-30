@@ -74,6 +74,10 @@ export interface OutputProbeResult {
   targetSource?: string | null;
   /** Officially advertised max output from web lookup, when found. */
   specClaimedMaxOutput?: number | null;
+  /** finish_reason from the stream ('stop' | 'length' | ...), when reported. */
+  finishReason?: string | null;
+  /** Model voluntarily stopped after a tiny output — ceiling NOT probed. */
+  selfStopped?: boolean;
 }
 
 export interface InputProbeOptions {

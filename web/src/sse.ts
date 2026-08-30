@@ -13,6 +13,11 @@ export async function postSse(
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
+  let sawDone = false;
+  const emit = (data: any) => {
+    if (data?.type === 'done') sawDone = true;
+    onEvent(data);
+  };
   // eslint-disable-next-line no-constant-condition
   while (true) {
     const { done, value } = await reader.read();
@@ -24,11 +29,12 @@ export async function postSse(
       for (const line of part.split('\n')) {
         if (!line.startsWith('data:')) continue;
         try {
-          onEvent(JSON.parse(line.slice(5).trim()));
+          emit(JSON.parse(line.slice(5).trim()));
         } catch {
           /* ignore malformed lines */
         }
       }
     }
   }
+  if (!sawDone) throw new Error('SSE 连接提前中断，未收到完成信号');
 }
