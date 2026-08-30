@@ -1,0 +1,21 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "llm-api-test",
+  "main": "server/index.ts",
+  "compatibility_date": "2025-08-01",
+  "workers_dev": true,
+  "kv_namespaces": [
+    { "binding": "FEEDBACK_KV", "id": "d0bb46a987674372acac16a1fba94be8" }
+  ],
+  "routes": [
+    { "pattern": "llmtest.luyuanlab.eu.org", "custom_domain": true }
+  ],
+  "assets": {
+    "directory": "./dist/client",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application"
+  },
+  "observability": {
+    "enabled": false
+  }
+}
