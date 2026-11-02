@@ -1,7 +1,7 @@
 # LLM API 渠道体检 🩺
 
 市面上的 LLM API 渠道鱼龙混杂：上下文虚标、输出缩水、拿旧权重冒充新版……
-这个工具让你把渠道放进"体检仪"，用可验证的手段看清它的真实能力与真伪。
+这个工具让你把渠道放进「体检仪」，用可验证的手段看清它的真实能力与真伪。
 
 - 在线实例：<https://llmtest.luyuanlab.eu.org>
 - 技术栈：Vue 3 · Hono · Cloudflare Workers · Vitest
